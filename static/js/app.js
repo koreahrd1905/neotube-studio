@@ -344,7 +344,7 @@ class MediaStudioApp {
         btnFetch.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 분석 중...';
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s max
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s for cloud cold starts
 
         try {
             const resp = await fetch('/api/info', {
