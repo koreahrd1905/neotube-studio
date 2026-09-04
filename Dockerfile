@@ -21,5 +21,5 @@ RUN python generate_icons.py
 ENV PORT=5050
 EXPOSE 5050
 
-# Run with Gunicorn WSGI server supporting dynamic $PORT
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5050} --workers 2 --timeout 120 app:app"]
+# Run with Gunicorn WSGI server (1 worker, 8 threads for shared background task memory)
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5050} --workers 1 --threads 8 --timeout 300 app:app"]

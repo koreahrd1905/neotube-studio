@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import uuid
 import threading
 import logging
@@ -9,7 +10,7 @@ import yt_dlp
 
 logger = logging.getLogger(__name__)
 
-# Global dictionary to hold background download progress
+# Global dictionary to hold background download progress in memory
 DOWNLOAD_TASKS: Dict[str, Dict[str, Any]] = {}
 
 def sanitize_filename(name: str) -> str:
@@ -26,7 +27,7 @@ def clean_youtube_url(text: str) -> str:
         return ""
     text = text.strip()
     
-    # Extract URL if surrounded by extra text (e.g. mobile share text)
+    # Extract URL if surrounded by extra text
     url_match = re.search(r'https?://[^\s]+', text)
     if url_match:
         text = url_match.group(0)
@@ -77,7 +78,7 @@ def get_oembed_fallback(url: str) -> Optional[Dict[str, Any]]:
                 "id": vid or '',
                 "uploader": data.get('author_name', 'YouTube Creator'),
                 "duration": 0,
-                "duration_formatted": "확인 중",
+                "duration_formatted": "확인 완료",
                 "thumbnail": thumb,
                 "view_count": 0,
                 "resolutions": ["Best (최고화질)", "1080p", "720p", "480p", "360p"],
@@ -147,16 +148,23 @@ def get_video_info(url: str) -> Dict[str, Any]:
                 "webpage_url": url
             }
     except Exception as e:
-        logger.warning(f"yt-dlp extract_info warning: {e}. Trying oEmbed fallback...")
-        # Fallback to fast oEmbed
-        fallback_data = get_oembed_fallback(url)
-        if fallback_data:
-            return fallback_data
-        
+        logger.error(f"Error in get_video_info: {e}")
         return {
             "success": False,
             "error": f"영상 정보를 불러올 수 없습니다: {str(e)}"
         }
+
+def save_task_to_file(output_dir: str, task_id: str, data: dict):
+    """Saves task status to disk for cross-worker multi-process synchronization."""
+    DOWNLOAD_TASKS.setdefault(task_id, {}).update(data)
+    try:
+        tasks_dir = os.path.join(output_dir, '.tasks')
+        os.makedirs(tasks_dir, exist_ok=True)
+        fpath = os.path.join(tasks_dir, f"{task_id}.json")
+        with open(fpath, 'w', encoding='utf-8') as f:
+            json.dump(DOWNLOAD_TASKS[task_id], f)
+    except Exception as e:
+        pass
 
 def start_download_task(
     url: str,
@@ -170,7 +178,7 @@ def start_download_task(
     """
     url = clean_youtube_url(url)
     task_id = str(uuid.uuid4())
-    DOWNLOAD_TASKS[task_id] = {
+    initial_data = {
         "id": task_id,
         "status": "starting",
         "progress": 0,
@@ -185,6 +193,7 @@ def start_download_task(
         "format_type": format_type,
         "error": None
     }
+    save_task_to_file(output_dir, task_id, initial_data)
 
     def progress_hook(d):
         if d['status'] == 'downloading':
@@ -204,7 +213,7 @@ def start_download_task(
             eta = d.get('eta', 0)
             eta_str = f"{eta}초" if eta else "--"
 
-            DOWNLOAD_TASKS[task_id].update({
+            save_task_to_file(output_dir, task_id, {
                 "status": "downloading",
                 "progress": round(percent, 1),
                 "speed": speed_str,
@@ -213,7 +222,7 @@ def start_download_task(
                 "downloaded_bytes": downloaded,
             })
         elif d['status'] == 'finished':
-            DOWNLOAD_TASKS[task_id].update({
+            save_task_to_file(output_dir, task_id, {
                 "status": "processing",
                 "progress": 99.0,
                 "speed": "인코딩/변환 중...",
@@ -226,7 +235,7 @@ def start_download_task(
         common_opts = {
             'quiet': True,
             'no_warnings': True,
-            'socket_timeout': 15,
+            'socket_timeout': 30,
             'retries': 5,
             'fragment_retries': 5,
             'file_access_retries': 3,
@@ -264,11 +273,12 @@ def start_download_task(
                 }],
             }
         else:
-            # MP4 Video download
-            format_spec = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-            if quality and quality.endswith('p'):
-                height = quality.replace('p', '')
-                format_spec = f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={height}]+bestaudio/best[height<={height}]/best'
+            # MP4 Video download (supports both regular and vertical shorts)
+            if quality and quality != 'best' and quality.endswith('p'):
+                res_num = quality.replace('p', '')
+                format_spec = f'bestvideo[height<={res_num}]+bestaudio/bestvideo[width<={res_num}]+bestaudio/bestvideo+bestaudio/best'
+            else:
+                format_spec = 'bestvideo+bestaudio/best'
 
             ydl_opts = {
                 **common_opts,
@@ -289,7 +299,6 @@ def start_download_task(
                 ext = 'mp3' if format_type == 'mp3' else 'mp4'
                 # Find final filename
                 actual_filename = f"{title}_{info.get('id', '')}.{ext}"
-                # If special characters exist, look up in dir
                 sanitized_pattern = info.get('id', '')
                 saved_file = None
                 for fname in os.listdir(output_dir):
@@ -300,7 +309,7 @@ def start_download_task(
                 if not saved_file:
                     saved_file = actual_filename
 
-                DOWNLOAD_TASKS[task_id].update({
+                save_task_to_file(output_dir, task_id, {
                     "status": "completed",
                     "progress": 100.0,
                     "filename": saved_file,
@@ -310,8 +319,8 @@ def start_download_task(
                 })
         except Exception as e:
             logger.error(f"Download task error: {e}")
-            DOWNLOAD_TASKS[task_id].update({
-                "status": "error",
+            save_task_to_file(output_dir, task_id, {
+                "status": "failed",
                 "error": str(e)
             })
 
@@ -319,5 +328,24 @@ def start_download_task(
     t.start()
     return task_id
 
-def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:
+def get_task_status(task_id: str, output_dir: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    # Check in memory first
+    if task_id in DOWNLOAD_TASKS and DOWNLOAD_TASKS[task_id].get("status") in ["downloading", "processing", "completed", "failed"]:
+        return DOWNLOAD_TASKS[task_id]
+        
+    # Check file cache for multi-worker synchronization
+    if not output_dir:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        output_dir = os.path.join(base_dir, 'downloads')
+        
+    fpath = os.path.join(output_dir, '.tasks', f"{task_id}.json")
+    if os.path.exists(fpath):
+        try:
+            with open(fpath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                DOWNLOAD_TASKS[task_id] = data
+                return data
+        except Exception:
+            pass
+            
     return DOWNLOAD_TASKS.get(task_id)
