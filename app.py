@@ -4,6 +4,7 @@ import socket
 import io
 import base64
 import logging
+import mimetypes
 import qrcode
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, Response
 from werkzeug.utils import secure_filename
@@ -302,7 +303,26 @@ def api_get_file(folder, filename):
         return jsonify({"error": "File not found"}), 404
 
     download_mode = request.args.get('download', '0') == '1'
-    return send_file(file_path, as_attachment=download_mode, download_name=filename)
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        ext = os.path.splitext(filename)[1].lower()
+        if ext == '.mp3':
+            mime_type = 'audio/mpeg'
+        elif ext == '.mp4':
+            mime_type = 'video/mp4'
+        elif ext == '.wmv':
+            mime_type = 'video/x-ms-wmv'
+        elif ext == '.avi':
+            mime_type = 'video/x-msvideo'
+        else:
+            mime_type = 'application/octet-stream'
+
+    return send_file(
+        file_path,
+        mimetype=mime_type,
+        as_attachment=download_mode,
+        download_name=filename
+    )
 
 @app.route('/api/history', methods=['GET'])
 def api_history():

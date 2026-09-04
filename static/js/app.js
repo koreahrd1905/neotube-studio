@@ -541,6 +541,20 @@ class MediaStudioApp {
         directBtn.href = `${task.file_url}?download=1`;
         directBtn.setAttribute('download', task.filename);
 
+        // Auto trigger device file download
+        setTimeout(() => {
+            try {
+                const autoLink = document.createElement('a');
+                autoLink.href = `${task.file_url}?download=1`;
+                autoLink.setAttribute('download', task.filename);
+                document.body.appendChild(autoLink);
+                autoLink.click();
+                document.body.removeChild(autoLink);
+            } catch (e) {
+                console.log('Auto download prompt bypassed:', e);
+            }
+        }, 500);
+
         // Send to Trimmer Action
         document.getElementById('btnSendToTrimmer').onclick = () => {
             this.sendToTrimmer(task.filename, 'downloads');
