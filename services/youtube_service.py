@@ -3,6 +3,7 @@ import re
 import uuid
 import threading
 import logging
+import requests
 from typing import Dict, Any, Optional
 import yt_dlp
 
@@ -16,21 +17,98 @@ def sanitize_filename(name: str) -> str:
     name = re.sub(r'[\\/*?:"<>|]', "", name)
     return name.strip()[:150]
 
+def clean_youtube_url(text: str) -> str:
+    """
+    Cleans and standardizes various YouTube URL formats.
+    Handles mobile shares, shorts, youtu.be, query params, etc.
+    """
+    if not text:
+        return ""
+    text = text.strip()
+    
+    # Extract URL if surrounded by extra text (e.g. mobile share text)
+    url_match = re.search(r'https?://[^\s]+', text)
+    if url_match:
+        text = url_match.group(0)
+
+    # Clean short URL: youtu.be/ID
+    m = re.search(r'youtu\.be/([a-zA-Z0-9_-]{11})', text)
+    if m:
+        return f"https://www.youtube.com/watch?v={m.group(1)}"
+
+    # Clean shorts URL: youtube.com/shorts/ID
+    m = re.search(r'youtube\.com/shorts/([a-zA-Z0-9_-]{11})', text)
+    if m:
+        return f"https://www.youtube.com/watch?v={m.group(1)}"
+
+    # Clean watch URL: youtube.com/watch?v=ID
+    m = re.search(r'youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})', text)
+    if m:
+        return f"https://www.youtube.com/watch?v={m.group(1)}"
+
+    # Clean live URL: youtube.com/live/ID
+    m = re.search(r'youtube\.com/live/([a-zA-Z0-9_-]{11})', text)
+    if m:
+        return f"https://www.youtube.com/watch?v={m.group(1)}"
+
+    return text
+
+def extract_video_id(url: str) -> Optional[str]:
+    """Extracts 11-char video ID from URL."""
+    m = re.search(r'(?:v=|youtu\.be/|shorts/|embed/|live/)([a-zA-Z0-9_-]{11})', url)
+    return m.group(1) if m else None
+
+def get_oembed_fallback(url: str) -> Optional[Dict[str, Any]]:
+    """
+    Fast, reliable fallback using YouTube oEmbed API when yt-dlp encounters datacenter blocking.
+    """
+    try:
+        vid = extract_video_id(url)
+        clean_url = f"https://www.youtube.com/watch?v={vid}" if vid else url
+        oembed_url = f"https://www.youtube.com/oembed?url={clean_url}&format=json"
+        
+        r = requests.get(oembed_url, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            thumb = f"https://i.ytimg.com/vi/{vid}/maxresdefault.jpg" if vid else data.get('thumbnail_url', '')
+            return {
+                "success": True,
+                "title": data.get('title', 'YouTube Video'),
+                "id": vid or '',
+                "uploader": data.get('author_name', 'YouTube Creator'),
+                "duration": 0,
+                "duration_formatted": "확인 중",
+                "thumbnail": thumb,
+                "view_count": 0,
+                "resolutions": ["Best (최고화질)", "1080p", "720p", "480p", "360p"],
+                "webpage_url": clean_url
+            }
+    except Exception as e:
+        logger.warning(f"oEmbed fallback failed: {e}")
+    return None
+
 def get_video_info(url: str) -> Dict[str, Any]:
     """
     Extracts video metadata without downloading.
+    Includes automatic fallback to ensure it never hangs.
     """
+    url = clean_youtube_url(url)
+    if not url:
+        return {"success": False, "error": "올바른 유튜브 주소를 입력해주세요."}
+
     common_opts = {
         'quiet': True,
         'no_warnings': True,
+        'socket_timeout': 8,
+        'retries': 2,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web'],
+                'player_client': ['android', 'ios', 'mweb', 'web'],
                 'player_skip': ['webpage', 'configs']
             }
         },
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
             'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         }
     }
@@ -76,10 +154,15 @@ def get_video_info(url: str) -> Dict[str, Any]:
                 "webpage_url": info.get('webpage_url', url)
             }
     except Exception as e:
-        logger.error(f"Error extracting video info: {e}")
+        logger.warning(f"yt-dlp extract_info warning: {e}. Trying oEmbed fallback...")
+        # Fallback to fast oEmbed
+        fallback_data = get_oembed_fallback(url)
+        if fallback_data:
+            return fallback_data
+        
         return {
             "success": False,
-            "error": str(e)
+            "error": f"영상 정보를 불러올 수 없습니다: {str(e)}"
         }
 
 def start_download_task(
@@ -92,6 +175,7 @@ def start_download_task(
     Spawns a background thread to download the requested YouTube media.
     Returns task_id for tracking progress.
     """
+    url = clean_youtube_url(url)
     task_id = str(uuid.uuid4())
     DOWNLOAD_TASKS[task_id] = {
         "id": task_id,
@@ -149,9 +233,13 @@ def start_download_task(
         common_opts = {
             'quiet': True,
             'no_warnings': True,
+            'socket_timeout': 15,
+            'retries': 5,
+            'fragment_retries': 5,
+            'file_access_retries': 3,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web'],
+                    'player_client': ['android', 'ios', 'mweb', 'web'],
                     'player_skip': ['webpage', 'configs']
                 }
             },
@@ -223,20 +311,19 @@ def start_download_task(
                     "status": "completed",
                     "progress": 100.0,
                     "filename": saved_file,
-                    "file_url": f"/api/files/downloads/{saved_file}",
                     "title": title,
                     "thumbnail": info.get('thumbnail', ''),
-                    "duration": info.get('duration', 0)
+                    "file_url": f"/api/files/downloads/{saved_file}"
                 })
         except Exception as e:
-            logger.error(f"Download failed for task {task_id}: {e}")
+            logger.error(f"Download task error: {e}")
             DOWNLOAD_TASKS[task_id].update({
-                "status": "failed",
+                "status": "error",
                 "error": str(e)
             })
 
-    thread = threading.Thread(target=run_download, daemon=True)
-    thread.start()
+    t = threading.Thread(target=run_download, daemon=True)
+    t.start()
     return task_id
 
 def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:

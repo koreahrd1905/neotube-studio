@@ -277,6 +277,19 @@ class MediaStudioApp {
         const btnPaste = document.getElementById('btnPasteUrl');
         const btnStartDownload = document.getElementById('btnStartDownload');
 
+        // Clean URL helper
+        const cleanUrl = (text) => {
+            if (!text) return '';
+            text = text.trim();
+            const urlMatch = text.match(/https?:\/\/[^\s]+/);
+            if (urlMatch) text = urlMatch[0];
+            const m = text.match(/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([a-zA-Z0-9_-]{11})/);
+            if (m && m[1]) {
+                return `https://www.youtube.com/watch?v=${m[1]}`;
+            }
+            return text;
+        };
+
         // URL input actions
         btnClear.addEventListener('click', () => {
             urlInput.value = '';
@@ -286,20 +299,23 @@ class MediaStudioApp {
         btnPaste.addEventListener('click', async () => {
             try {
                 const text = await navigator.clipboard.readText();
-                urlInput.value = text;
-                this.fetchVideoInfo(text);
+                const cleaned = cleanUrl(text);
+                urlInput.value = cleaned || text;
+                this.fetchVideoInfo(urlInput.value);
             } catch (e) {
                 window.showToast('클립보드 권한이 필요합니다.', 'error');
             }
         });
 
         btnFetch.addEventListener('click', () => {
-            const url = urlInput.value.trim();
-            if (!url) {
+            const raw = urlInput.value.trim();
+            if (!raw) {
                 window.showToast('유튜브 URL을 입력해주세요.', 'error');
                 return;
             }
-            this.fetchVideoInfo(url);
+            const cleaned = cleanUrl(raw);
+            urlInput.value = cleaned;
+            this.fetchVideoInfo(cleaned);
         });
 
         urlInput.addEventListener('keydown', (e) => {
@@ -327,12 +343,18 @@ class MediaStudioApp {
         btnFetch.disabled = true;
         btnFetch.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 분석 중...';
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s max
+
         try {
             const resp = await fetch('/api/info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
+                body: JSON.stringify({ url }),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
+            
             const data = await resp.json();
 
             if (data.success) {
@@ -353,7 +375,12 @@ class MediaStudioApp {
                 window.showToast(data.error || '영상 정보를 불러오지 못했습니다.', 'error');
             }
         } catch (err) {
-            window.showToast(`네트워크 오류: ${err.message}`, 'error');
+            clearTimeout(timeoutId);
+            if (err.name === 'AbortError') {
+                window.showToast('분석 시간이 초과되었습니다. 다시 한 번 정보 조회를 눌러주세요.', 'error');
+            } else {
+                window.showToast(`네트워크 오류: ${err.message}`, 'error');
+            }
         } finally {
             btnFetch.disabled = false;
             btnFetch.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> 정보 조회';
