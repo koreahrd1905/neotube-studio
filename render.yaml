@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: youtube-downloader-studio
+    env: docker
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 5050

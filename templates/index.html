@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>유튜브 다운로더 & 미디어 스튜디오 PRO</title>
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MediaStudio">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="/static/icons/favicon.png">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="background-glow glow-1"></div>
+    <div class="background-glow glow-2"></div>
+    <div class="background-glow glow-3"></div>
+
+    <div class="app-container">
+        <!-- PWA Install Banner for Mobile -->
+        <div class="pwa-install-banner" id="pwaInstallBanner" style="display: none;">
+            <div class="pwa-banner-left">
+                <img src="/static/icons/icon-192.png" alt="App Icon" class="pwa-banner-icon">
+                <div>
+                    <strong class="pwa-banner-title">미디어 스튜디오 앱 설치</strong>
+                    <p class="pwa-banner-desc">휴대폰 바탕화면에 추가하여 앱처럼 사용하세요</p>
+                </div>
+            </div>
+            <div class="pwa-banner-right">
+                <button class="btn btn-sm btn-primary" id="btnPwaInstall">
+                    <i class="fa-solid fa-download"></i> 앱 설치하기
+                </button>
+                <button class="btn-close-banner" id="btnClosePwaBanner"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </div>
+
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <i class="fa-brands fa-youtube"></i>
+                    <i class="fa-solid fa-scissors sub-icon"></i>
+                </div>
+                <div>
+                    <h1 class="logo-title">MediaStudio <span class="badge-pro">PRO</span></h1>
+                    <p class="logo-subtitle">유튜브 고음질 다운로더 &bull; 오디오 정밀 자르기 &bull; 동영상 포맷 변환기</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn-mobile-connect" id="btnOpenMobileConnect">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                    <span>📱 휴대폰 연결/앱 설치</span>
+                </button>
+                <button class="btn-history" id="btnOpenHistory">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    <span>작업 보관함</span>
+                    <span class="history-count" id="historyCountBadge">0</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Navigation Tabs -->
+        <nav class="studio-tabs">
+            <button class="tab-btn active" data-tab="tab-downloader">
+                <i class="fa-brands fa-youtube tab-icon"></i>
+                <div class="tab-text">
+                    <span class="tab-main">1. 유튜브 다운로더</span>
+                    <span class="tab-desc">MP3 음악 & MP4 영상 추출</span>
+                </div>
+            </button>
+            <button class="tab-btn" data-tab="tab-trimmer">
+                <i class="fa-solid fa-scissors tab-icon"></i>
+                <div class="tab-text">
+                    <span class="tab-main">2. 오디오 자르기 & 편집</span>
+                    <span class="tab-desc">원하는 구간 정밀 추출 & 페이드</span>
+                </div>
+            </button>
+            <button class="tab-btn" data-tab="tab-converter">
+                <i class="fa-solid fa-arrows-rotate tab-icon"></i>
+                <div class="tab-text">
+                    <span class="tab-main">3. 동영상 포맷 변환기</span>
+                    <span class="tab-desc">MP4 ⇄ WMV ⇄ AVI 상호 변환</span>
+                </div>
+            </button>
+        </nav>
+
+        <!-- Tab 1: YouTube Downloader -->
+        <section id="tab-downloader" class="tab-content active">
+            <div class="card glass-panel">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-link"></i> 유튜브 영상 및 음악 다운로드</h2>
+                    <p>다운로드할 유튜브 주소(URL)를 입력하고 고음질 MP3 또는 고화질 MP4를 다운로드하세요.</p>
+                </div>
+
+                <div class="url-input-group">
+                    <div class="input-wrapper">
+                        <i class="fa-brands fa-youtube input-icon"></i>
+                        <input type="text" id="ytUrlInput" placeholder="https://www.youtube.com/watch?v=... 또는 https://youtu.be/..." autofocus>
+                        <button class="btn-clear" id="btnClearUrl" title="지우기"><i class="fa-solid fa-xmark"></i></button>
+                        <button class="btn-paste" id="btnPasteUrl" title="클립보드 붙여넣기"><i class="fa-regular fa-clipboard"></i> 붙여넣기</button>
+                    </div>
+                    <button class="btn btn-primary" id="btnFetchInfo">
+                        <i class="fa-solid fa-magnifying-glass"></i> 정보 조회
+                    </button>
+                </div>
+
+                <!-- Video Metadata Preview -->
+                <div class="video-preview-card" id="videoPreviewCard" style="display: none;">
+                    <div class="preview-layout">
+                        <div class="thumb-container">
+                            <img id="videoThumb" src="" alt="Thumbnail">
+                            <span class="duration-badge" id="videoDuration">00:00</span>
+                        </div>
+                        <div class="info-container">
+                            <h3 id="videoTitle" class="video-title">영상 제목</h3>
+                            <p class="video-uploader" id="videoUploader"><i class="fa-solid fa-user-check"></i> 채널명</p>
+                            
+                            <div class="download-options-grid">
+                                <div class="option-box">
+                                    <label><i class="fa-solid fa-file-audio"></i> 다운로드 포맷</label>
+                                    <div class="format-toggle">
+                                        <button class="toggle-btn active" data-format="mp3">
+                                            <i class="fa-solid fa-music"></i> MP3 (음악)
+                                        </button>
+                                        <button class="toggle-btn" data-format="mp4">
+                                            <i class="fa-solid fa-video"></i> MP4 (동영상)
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="option-box">
+                                    <label><i class="fa-solid fa-sliders"></i> 품질 / 해상도</label>
+                                    <select id="downloadQualitySelect" class="styled-select">
+                                        <!-- Dynamic options -->
+                                        <option value="320k">최고음질 (320 kbps MP3)</option>
+                                        <option value="192k">표준음질 (192 kbps MP3)</option>
+                                        <option value="128k">일반음질 (128 kbps MP3)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button class="btn btn-download-huge" id="btnStartDownload">
+                                <i class="fa-solid fa-cloud-arrow-down"></i> 지금 다운로드 시작
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Download Progress Bar -->
+                <div class="download-progress-container" id="downloadProgressContainer" style="display: none;">
+                    <div class="progress-info-row">
+                        <span class="status-badge pulse" id="downloadStatusText"><i class="fa-solid fa-spinner fa-spin"></i> 다운로드 준비 중...</span>
+                        <span class="progress-percentage" id="downloadPercent">0%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" id="downloadProgressFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="progress-details">
+                        <span id="downloadSpeed"><i class="fa-solid fa-gauge-high"></i> 속도: -- KB/s</span>
+                        <span id="downloadEta"><i class="fa-solid fa-hourglass-half"></i> 남은 시간: --</span>
+                    </div>
+                </div>
+
+                <!-- Download Complete Card -->
+                <div class="download-complete-card" id="downloadCompleteCard" style="display: none;">
+                    <div class="complete-header">
+                        <i class="fa-solid fa-circle-check check-icon"></i>
+                        <div>
+                            <h4>다운로드 및 변환 완료!</h4>
+                            <p id="completedFileName">파일명.mp3</p>
+                        </div>
+                    </div>
+                    <div class="media-player-box" id="completedPlayerBox">
+                        <!-- Dynamic audio or video player will be injected here -->
+                    </div>
+                    <div class="complete-actions">
+                        <a id="btnDirectDownload" href="#" class="btn btn-success" download>
+                            <i class="fa-solid fa-download"></i> PC에 저장하기
+                        </a>
+                        <button class="btn btn-secondary" id="btnSendToTrimmer">
+                            <i class="fa-solid fa-scissors"></i> ✂️ 오디오 자르기로 보내기
+                        </button>
+                        <button class="btn btn-secondary" id="btnSendToConverter">
+                            <i class="fa-solid fa-arrows-rotate"></i> 🔄 포맷 변환기로 보내기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: Audio Trimmer & Cutter -->
+        <section id="tab-trimmer" class="tab-content">
+            <div class="card glass-panel">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-scissors"></i> 오디오 / 음악 구간 자르기 & 편집</h2>
+                    <p>원하는 시작 시간과 종료 시간을 설정하여 필요한 부분만 깔끔하게 잘라내고 페이드 효과를 적용하세요.</p>
+                </div>
+
+                <!-- File Selector / Drop Zone -->
+                <div class="upload-dropzone" id="trimmerDropzone">
+                    <input type="file" id="trimmerFileInput" accept="audio/*,video/*" style="display: none;">
+                    <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+                    <p class="drop-main-text">MP3 또는 음악/동영상 파일을 여기에 드래그하거나 클릭하여 선택하세요</p>
+                    <p class="drop-sub-text">지원 형식: MP3, WAV, M4A, OGG, MP4, AVI, WMV 등 (최대 1GB)</p>
+                    <button class="btn btn-secondary" onclick="document.getElementById('trimmerFileInput').click()">
+                        <i class="fa-regular fa-folder-open"></i> 파일 찾아보기
+                    </button>
+                </div>
+
+                <!-- Active Loaded Media Info -->
+                <div class="loaded-file-bar" id="trimmerFileBar" style="display: none;">
+                    <div class="file-icon-box"><i class="fa-solid fa-music"></i></div>
+                    <div class="file-details">
+                        <span class="file-title" id="trimmerFileName">선택된 파일 없음</span>
+                        <span class="file-meta" id="trimmerFileMeta">길이: 00:00 | 용량: 0 MB</span>
+                    </div>
+                    <button class="btn-icon" id="btnChangeTrimmerFile" title="다른 파일 선택"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+
+                <!-- Trimmer Workspace -->
+                <div class="trimmer-workspace" id="trimmerWorkspace" style="display: none;">
+                    <!-- Waveform Visualizer Canvas -->
+                    <div class="waveform-box">
+                        <canvas id="waveformCanvas" width="1000" height="130"></canvas>
+                        <div class="waveform-cursor" id="waveformCursor"></div>
+                        <div class="waveform-selection-overlay" id="selectionOverlay"></div>
+                    </div>
+
+                    <!-- Audio Playback Controls -->
+                    <div class="audio-playback-bar">
+                        <div class="playback-buttons">
+                            <button class="btn-circle" id="btnWavePlayPause" title="재생/일시정지">
+                                <i class="fa-solid fa-play" id="wavePlayIcon"></i>
+                            </button>
+                            <button class="btn-circle btn-small" id="btnWaveStop" title="정지">
+                                <i class="fa-solid fa-stop"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline" id="btnPlaySelection">
+                                <i class="fa-solid fa-repeat"></i> 선택 구간만 재생
+                            </button>
+                        </div>
+                        <div class="time-display">
+                            <span class="current-time" id="trimmerCurrentTime">00:00.00</span>
+                            <span class="time-divider">/</span>
+                            <span class="total-time" id="trimmerTotalDuration">00:00.00</span>
+                        </div>
+                    </div>
+
+                    <!-- Precise Time Selection Controls -->
+                    <div class="time-controllers-grid">
+                        <!-- Start Time Box -->
+                        <div class="time-card">
+                            <div class="time-card-header">
+                                <span><i class="fa-solid fa-hourglass-start"></i> 시작 시간 (Start)</span>
+                                <button class="btn-link" id="btnSetStartCurrent"><i class="fa-solid fa-location-crosshairs"></i> 현재 위치로 설정</button>
+                            </div>
+                            <div class="time-inputs-row">
+                                <input type="text" id="inputStartTime" class="time-input" value="00:00:00.00" placeholder="00:00:00.00">
+                                <div class="step-btn-group">
+                                    <button class="btn-step" data-target="start" data-delta="-1">-1초</button>
+                                    <button class="btn-step" data-target="start" data-delta="-0.1">-0.1s</button>
+                                    <button class="btn-step" data-target="start" data-delta="+0.1">+0.1s</button>
+                                    <button class="btn-step" data-target="start" data-delta="+1">+1초</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Duration Badge Box -->
+                        <div class="duration-highlight-box">
+                            <span class="dh-label">추출될 구간 길이</span>
+                            <span class="dh-value" id="selectedDurationText">0.0 초</span>
+                            <div class="dh-range-badge" id="selectedRangeBadge">00:00 ~ 00:00</div>
+                        </div>
+
+                        <!-- End Time Box -->
+                        <div class="time-card">
+                            <div class="time-card-header">
+                                <span><i class="fa-solid fa-hourglass-end"></i> 종료 시간 (End)</span>
+                                <button class="btn-link" id="btnSetEndCurrent"><i class="fa-solid fa-location-crosshairs"></i> 현재 위치로 설정</button>
+                            </div>
+                            <div class="time-inputs-row">
+                                <input type="text" id="inputEndTime" class="time-input" value="00:00:00.00" placeholder="00:00:00.00">
+                                <div class="step-btn-group">
+                                    <button class="btn-step" data-target="end" data-delta="-1">-1초</button>
+                                    <button class="btn-step" data-target="end" data-delta="-0.1">-0.1s</button>
+                                    <button class="btn-step" data-target="end" data-delta="+0.1">+0.1s</button>
+                                    <button class="btn-step" data-target="end" data-delta="+1">+1초</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Options & Export -->
+                    <div class="export-options-card">
+                        <div class="export-options-grid">
+                            <div class="option-item">
+                                <label><i class="fa-solid fa-file-export"></i> 내보낼 오디오 포맷</label>
+                                <select id="trimOutputFormat" class="styled-select">
+                                    <option value="mp3">MP3 (고품질 320kbps - 권장)</option>
+                                    <option value="wav">WAV (무손실 원음)</option>
+                                    <option value="m4a">M4A / AAC (애플 호환)</option>
+                                    <option value="ogg">OGG (웹 최적화)</option>
+                                    <option value="flac">FLAC (무손실 압축)</option>
+                                </select>
+                            </div>
+                            <div class="option-item">
+                                <label><i class="fa-solid fa-chart-line"></i> 페이드 인 (Fade-In): <span id="fadeInVal">0.0초</span></label>
+                                <input type="range" id="sliderFadeIn" min="0" max="5" step="0.5" value="0" class="custom-range">
+                            </div>
+                            <div class="option-item">
+                                <label><i class="fa-solid fa-chart-line fa-flip-horizontal"></i> 페이드 아웃 (Fade-Out): <span id="fadeOutVal">0.0초</span></label>
+                                <input type="range" id="sliderFadeOut" min="0" max="5" step="0.5" value="0" class="custom-range">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary btn-cut-action" id="btnExecuteTrim">
+                            <i class="fa-solid fa-scissors"></i> 선택 구간 자르기 및 추출
+                        </button>
+                    </div>
+
+                    <!-- Trim Result Section -->
+                    <div class="trim-result-box" id="trimResultBox" style="display: none;">
+                        <div class="result-header">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <div>
+                                <h4>오디오 구간 자르기 완료!</h4>
+                                <p id="trimmedResultFileName">trimmed_file.mp3</p>
+                            </div>
+                        </div>
+                        <audio id="trimmedAudioPlayer" controls class="full-width-audio"></audio>
+                        <div class="result-actions">
+                            <a id="btnDownloadTrimmed" href="#" class="btn btn-success" download>
+                                <i class="fa-solid fa-download"></i> 잘라낸 오디오 다운로드
+                            </a>
+                            <button class="btn btn-secondary" id="btnSendTrimmedToConverter">
+                                <i class="fa-solid fa-arrows-rotate"></i> 🔄 포맷 변환기로 보내기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 3: Video Format Converter -->
+        <section id="tab-converter" class="tab-content">
+            <div class="card glass-panel">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-arrows-rotate"></i> 동영상 포맷 상호 변환기</h2>
+                    <p>MP4, WMV, AVI, MKV, WebM 동영상 파일을 고화질로 자유롭게 상호 변환하거나 음원(MP3)만 추출하세요.</p>
+                </div>
+
+                <!-- File Selector / Drop Zone -->
+                <div class="upload-dropzone" id="converterDropzone">
+                    <input type="file" id="converterFileInput" accept="video/*,audio/*,.wmv,.avi,.mp4,.mkv,.webm" style="display: none;">
+                    <i class="fa-solid fa-file-video drop-icon"></i>
+                    <p class="drop-main-text">변환할 동영상(MP4, WMV, AVI 등) 파일을 드래그하거나 선택하세요</p>
+                    <p class="drop-sub-text">상호 변환 가능: MP4 ⇄ WMV ⇄ AVI ⇄ MKV ⇄ WEBM ⇄ MP3 (최대 1GB)</p>
+                    <button class="btn btn-secondary" onclick="document.getElementById('converterFileInput').click()">
+                        <i class="fa-regular fa-folder-open"></i> 동영상 파일 선택
+                    </button>
+                </div>
+
+                <!-- Active Loaded Converter Media Info -->
+                <div class="loaded-file-bar" id="converterFileBar" style="display: none;">
+                    <div class="file-icon-box"><i class="fa-solid fa-video"></i></div>
+                    <div class="file-details">
+                        <span class="file-title" id="converterFileName">선택된 파일 없음</span>
+                        <span class="file-meta" id="converterFileMeta">포맷: MP4 | 해상도: 1920x1080 | 용량: 0 MB</span>
+                    </div>
+                    <button class="btn-icon" id="btnChangeConverterFile" title="다른 파일 선택"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+
+                <!-- Conversion Configuration -->
+                <div class="converter-workspace" id="converterWorkspace" style="display: none;">
+                    <div class="conversion-flow-card">
+                        <!-- Source Box -->
+                        <div class="flow-side">
+                            <span class="flow-label">현재 원본 형식</span>
+                            <div class="format-badge current" id="sourceFormatBadge">MP4</div>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div class="flow-arrow">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </div>
+
+                        <!-- Target Box -->
+                        <div class="flow-side">
+                            <span class="flow-label">변환할 목표 형식</span>
+                            <div class="target-format-buttons" id="targetFormatBtnGroup">
+                                <button class="format-btn" data-target="wmv">WMV</button>
+                                <button class="format-btn" data-target="avi">AVI</button>
+                                <button class="format-btn active" data-target="mp4">MP4</button>
+                                <button class="format-btn" data-target="mkv">MKV</button>
+                                <button class="format-btn" data-target="webm">WEBM</button>
+                                <button class="format-btn" data-target="mp3">MP3 (음원 추출)</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Conversion Options -->
+                    <div class="conversion-options-grid">
+                        <div class="option-item">
+                            <label><i class="fa-solid fa-expand"></i> 해상도 리사이징</label>
+                            <select id="converterResolutionSelect" class="styled-select">
+                                <option value="original">원본 해상도 유지 (권장)</option>
+                                <option value="1080p">FHD (1920x1080)</option>
+                                <option value="720p">HD (1280x720)</option>
+                                <option value="480p">SD (854x480)</option>
+                            </select>
+                        </div>
+                        <div class="option-item">
+                            <label><i class="fa-solid fa-gauge-high"></i> 화질 및 인코딩 품질</label>
+                            <select id="converterQualitySelect" class="styled-select">
+                                <option value="high">고화질 (High Quality - 원본 손실 최소화)</option>
+                                <option value="medium">표준 화질 (Medium Quality - 용량 균형)</option>
+                                <option value="fast">초고속 인코딩 (Fast Encoding)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-convert-huge" id="btnExecuteConvert">
+                        <i class="fa-solid fa-arrows-spin"></i> 포맷 변환 시작하기
+                    </button>
+
+                    <!-- Conversion Spinner / Progress -->
+                    <div class="convert-progress-box" id="convertProgressBox" style="display: none;">
+                        <div class="spinner-neon"></div>
+                        <h4>FFmpeg 고속 변환 중...</h4>
+                        <p>비디오 스트림 인코딩 및 오디오 병합 작업이 진행되고 있습니다.</p>
+                    </div>
+
+                    <!-- Conversion Result -->
+                    <div class="convert-result-box" id="convertResultBox" style="display: none;">
+                        <div class="result-header">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <div>
+                                <h4>포맷 변환 완료!</h4>
+                                <p id="convertedResultFileName">converted_video.wmv</p>
+                                <span class="badge-size" id="convertedResultSize">용량: -- MB</span>
+                            </div>
+                        </div>
+                        
+                        <div class="preview-video-wrapper" id="convertedVideoPreviewBox">
+                            <!-- Video preview element injected dynamically -->
+                        </div>
+
+                        <div class="result-actions">
+                            <a id="btnDownloadConverted" href="#" class="btn btn-success" download>
+                                <i class="fa-solid fa-download"></i> 변환된 파일 다운로드
+                            </a>
+                            <button class="btn btn-secondary" id="btnSendConvertedToTrimmer">
+                                <i class="fa-solid fa-scissors"></i> ✂️ 오디오 자르기로 보내기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- History Drawer / Modal -->
+        <div class="modal-overlay" id="historyModal" style="display: none;">
+            <div class="modal-panel glass-panel">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-clock-rotate-left"></i> 작업 보관함 및 다운로드 내역</h3>
+                    <button class="btn-close-modal" id="btnCloseHistory"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="history-list-container" id="historyListContainer">
+                    <!-- History items injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Connect & Install App Modal -->
+        <div class="modal-overlay" id="mobileModal" style="display: none;">
+            <div class="modal-panel glass-panel mobile-connect-panel">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-mobile-screen-button"></i> 📱 휴대폰 어디서나 연결 & 앱 설치</h3>
+                    <button class="btn-close-modal" id="btnCloseMobile"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                
+                <div class="network-mode-tabs">
+                    <button class="mode-tab-btn active" id="btnModeGlobal" data-mode="global">
+                        <i class="fa-solid fa-globe"></i> 🌐 LTE/5G 외부 어디서나 접속
+                    </button>
+                    <button class="mode-tab-btn" id="btnModeLocal" data-mode="local">
+                        <i class="fa-solid fa-wifi"></i> 🏠 같은 Wi-Fi 접속
+                    </button>
+                    <button class="mode-tab-btn" id="btnModeTermux" data-mode="termux">
+                        <i class="fa-solid fa-mobile-retro"></i> ⚡ 폰 자체 단독 실행 (Termux)
+                    </button>
+                </div>
+
+                <div class="mobile-modal-body">
+                    <!-- Standard QR Box (for Global / Local) -->
+                    <div id="standardQrSection" style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 20px;">
+                        <div class="qr-wrapper" id="qrWrapper">
+                            <img id="mobileQrImg" src="" alt="Mobile QR Code" class="qr-img">
+                            <div class="qr-loading-spinner" id="qrLoadingSpinner" style="display: none;">
+                                <div class="spinner-neon"></div>
+                                <p>글로벌 보안 HTTPS 터널 연결 중...</p>
+                            </div>
+                            <span class="qr-hint" id="qrHintText"><i class="fa-solid fa-camera"></i> 스마트폰 카메라로 QR 코드를 스캔하세요</span>
+                        </div>
+                        
+                        <div class="mobile-url-box">
+                            <div class="url-header-row">
+                                <span class="url-label" id="mobileUrlLabel">🌐 외부 어디서나 접속 주소 (HTTPS):</span>
+                                <span class="badge-tag" id="networkTag">LTE/5G 가능</span>
+                            </div>
+                            <div class="url-copy-row">
+                                <input type="text" id="mobileUrlText" readonly class="mobile-url-input">
+                                <button class="btn btn-sm btn-secondary" id="btnCopyMobileUrl">
+                                    <i class="fa-regular fa-copy"></i> 주소 복사
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="install-guide-grid">
+                            <div class="guide-card">
+                                <div class="guide-card-head"><i class="fa-brands fa-android android-icon"></i> 안드로이드 (삼성/Chrome)</div>
+                                <ol class="guide-steps">
+                                    <li>위 QR 코드를 카메라로 스캔하여 접속합니다.</li>
+                                    <li>브라우저 상단/하단의 <strong>[앱 설치하기]</strong> 배너 클릭</li>
+                                    <li>또는 메뉴(⋮) ➜ <strong>[홈 화면에 추가]</strong> 클릭 시 바탕화면에 독립 앱으로 설치됩니다!</li>
+                                </ol>
+                            </div>
+                            <div class="guide-card">
+                                <div class="guide-card-head"><i class="fa-brands fa-apple apple-icon"></i> 아이폰 (iOS Safari)</div>
+                                <ol class="guide-steps">
+                                    <li>사파리(Safari)로 위 주소에 접속합니다.</li>
+                                    <li>하단 중앙의 <strong>공유 아이콘( <i class="fa-solid fa-arrow-up-from-bracket"></i> )</strong> 클릭</li>
+                                    <li>메뉴에서 <strong>[홈 화면에 추가]</strong>를 누르면 홈 화면에 전용 앱으로 등록됩니다!</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Termux Standalone Guide Section -->
+                    <div id="termuxGuideSection" style="width: 100%; display: none; text-align: left;">
+                        <div class="termux-info-box">
+                            <h4><i class="fa-solid fa-microchip"></i> 노트북 전원을 완전히 꺼도 스마트폰 자체에서 100% 실행</h4>
+                            <p>스마트폰 카메라로 아래 QR 코드를 비추어 <strong>1단계(Termux)</strong>와 <strong>2단계(패키지)</strong>를 다운로드하세요.</p>
+                            
+                            <div class="termux-qr-grid">
+                                <!-- QR 1: Termux APK -->
+                                <div class="termux-qr-card">
+                                    <div class="termux-card-badge"><span class="step-num-sm">1</span> Termux APK 앱 설치</div>
+                                    <div class="qr-box-small">
+                                        <img id="termuxApkQrImg" src="" alt="Termux APK QR" class="qr-img-sm">
+                                    </div>
+                                    <span class="qr-sub-desc">📷 카메라로 스캔하여 APK 바로 다운로드</span>
+                                    <a id="btnDirectTermuxApk" href="https://f-droid.org/repo/com.termux_1020.apk" target="_blank" class="btn btn-sm btn-outline" style="width: 100%; margin-top: 8px;">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i> 다운로드 링크 열기
+                                    </a>
+                                </div>
+
+                                <!-- QR 2: Project Zip Package -->
+                                <div class="termux-qr-card">
+                                    <div class="termux-card-badge"><span class="step-num-sm">2</span> 소스코드 ZIP 패키지</div>
+                                    <div class="qr-box-small">
+                                        <img id="zipDownloadQrImg" src="" alt="ZIP Download QR" class="qr-img-sm">
+                                    </div>
+                                    <span class="qr-sub-desc">📷 카메라로 스캔하여 ZIP 바로 다운로드</span>
+                                    <a id="btnDirectZipDownload" href="/static/mediastudio_mobile.zip" download="mediastudio_mobile.zip" class="btn btn-sm btn-primary" style="width: 100%; margin-top: 8px;">
+                                        <i class="fa-solid fa-download"></i> ZIP 다운로드 (50KB)
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="termux-step-3-box">
+                                <div class="termux-card-badge"><span class="step-num-sm">3</span> Termux 실행 후 1줄 명령어 붙여넣기</div>
+                                <p style="font-size: 12px; color: var(--text-muted); margin: 6px 0;">스마트폰에서 Termux 앱을 열고 아래 명령어를 붙여넣어 실행하면 자동으로 모든 준비가 끝납니다:</p>
+                                <div class="code-terminal-box">
+                                    <code id="termuxCmdText">pkg install -y python ffmpeg unzip && termux-setup-storage && cd ~/storage/downloads && unzip -o mediastudio_mobile.zip -d ~/mediastudio && cd ~/mediastudio && bash install_termux.sh</code>
+                                </div>
+                                <button class="btn btn-sm btn-secondary" id="btnCopyTermuxCmd" style="margin-top: 8px;">
+                                    <i class="fa-regular fa-copy"></i> 명령어 복사하기
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Toast Notification -->
+        <div class="toast-container" id="toastContainer"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/audio_cutter.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

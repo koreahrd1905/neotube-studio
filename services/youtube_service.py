@@ -1,0 +1,243 @@
+import os
+import re
+import uuid
+import threading
+import logging
+from typing import Dict, Any, Optional
+import yt_dlp
+
+logger = logging.getLogger(__name__)
+
+# Global dictionary to hold background download progress
+DOWNLOAD_TASKS: Dict[str, Dict[str, Any]] = {}
+
+def sanitize_filename(name: str) -> str:
+    """Removes or replaces invalid characters in filenames."""
+    name = re.sub(r'[\\/*?:"<>|]', "", name)
+    return name.strip()[:150]
+
+def get_video_info(url: str) -> Dict[str, Any]:
+    """
+    Extracts video metadata without downloading.
+    """
+    common_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web'],
+                'player_skip': ['webpage', 'configs']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        }
+    }
+
+    ydl_opts = {
+        **common_opts,
+        'extract_flat': False,
+        'skip_download': True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            # Formats available
+            formats = info.get('formats', [])
+            resolutions = set()
+            for f in formats:
+                h = f.get('height')
+                if h and f.get('vcodec') != 'none':
+                    resolutions.add(h)
+            
+            sorted_res = sorted(list(resolutions), reverse=True)
+            res_labels = [f"{r}p" for r in sorted_res if r >= 360]
+            if not res_labels:
+                res_labels = ["Best (최고화질)", "1080p", "720p", "480p", "360p"]
+
+            duration = info.get('duration', 0)
+            mins = int(duration // 60)
+            secs = int(duration % 60)
+            duration_str = f"{mins}:{secs:02d}" if duration < 3600 else f"{int(duration // 3600)}:{mins % 60:02d}:{secs:02d}"
+
+            return {
+                "success": True,
+                "title": info.get('title', 'Unknown Title'),
+                "id": info.get('id', ''),
+                "uploader": info.get('uploader', info.get('channel', 'Unknown')),
+                "duration": duration,
+                "duration_formatted": duration_str,
+                "thumbnail": info.get('thumbnail', ''),
+                "view_count": info.get('view_count', 0),
+                "resolutions": res_labels,
+                "webpage_url": info.get('webpage_url', url)
+            }
+    except Exception as e:
+        logger.error(f"Error extracting video info: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def start_download_task(
+    url: str,
+    format_type: str, # "mp3" or "mp4"
+    quality: str,     # "best", "1080p", "720p", "320k", "192k" etc.
+    output_dir: str
+) -> str:
+    """
+    Spawns a background thread to download the requested YouTube media.
+    Returns task_id for tracking progress.
+    """
+    task_id = str(uuid.uuid4())
+    DOWNLOAD_TASKS[task_id] = {
+        "id": task_id,
+        "status": "starting",
+        "progress": 0,
+        "speed": "0 KB/s",
+        "eta": "0s",
+        "total_bytes": 0,
+        "downloaded_bytes": 0,
+        "filename": "",
+        "file_url": "",
+        "title": "",
+        "thumbnail": "",
+        "format_type": format_type,
+        "error": None
+    }
+
+    def progress_hook(d):
+        if d['status'] == 'downloading':
+            total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
+            downloaded = d.get('downloaded_bytes', 0)
+            percent = (downloaded / total) * 100 if total > 0 else 0
+            
+            speed = d.get('speed', 0)
+            if speed:
+                if speed > 1024 * 1024:
+                    speed_str = f"{speed / (1024 * 1024):.1f} MB/s"
+                else:
+                    speed_str = f"{speed / 1024:.1f} KB/s"
+            else:
+                speed_str = "-- KB/s"
+
+            eta = d.get('eta', 0)
+            eta_str = f"{eta}초" if eta else "--"
+
+            DOWNLOAD_TASKS[task_id].update({
+                "status": "downloading",
+                "progress": round(percent, 1),
+                "speed": speed_str,
+                "eta": eta_str,
+                "total_bytes": total,
+                "downloaded_bytes": downloaded,
+            })
+        elif d['status'] == 'finished':
+            DOWNLOAD_TASKS[task_id].update({
+                "status": "processing",
+                "progress": 99.0,
+                "speed": "인코딩/변환 중...",
+                "eta": "마무리 중"
+            })
+
+    def run_download():
+        os.makedirs(output_dir, exist_ok=True)
+        
+        common_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'web'],
+                    'player_skip': ['webpage', 'configs']
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+            }
+        }
+
+        # Determine format options
+        if format_type == "mp3":
+            audio_quality = "0" # best VBR
+            if quality == "320k":
+                audio_quality = "320"
+            elif quality == "192k":
+                audio_quality = "192"
+            elif quality == "128k":
+                audio_quality = "128"
+
+            ydl_opts = {
+                **common_opts,
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(output_dir, '%(title)s_%(id)s.%(ext)s'),
+                'progress_hooks': [progress_hook],
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': audio_quality,
+                }],
+            }
+        else:
+            # MP4 Video download
+            format_spec = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            if quality and quality.endswith('p'):
+                height = quality.replace('p', '')
+                format_spec = f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={height}]+bestaudio/best[height<={height}]/best'
+
+            ydl_opts = {
+                **common_opts,
+                'format': format_spec,
+                'outtmpl': os.path.join(output_dir, '%(title)s_%(id)s.%(ext)s'),
+                'progress_hooks': [progress_hook],
+                'merge_output_format': 'mp4',
+                'postprocessors': [{
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': 'mp4'
+                }]
+            }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info.get('title', 'media')
+                ext = 'mp3' if format_type == 'mp3' else 'mp4'
+                # Find final filename
+                actual_filename = f"{title}_{info.get('id', '')}.{ext}"
+                # If special characters exist, look up in dir
+                sanitized_pattern = info.get('id', '')
+                saved_file = None
+                for fname in os.listdir(output_dir):
+                    if sanitized_pattern in fname and fname.endswith(f".{ext}"):
+                        saved_file = fname
+                        break
+                        
+                if not saved_file:
+                    saved_file = actual_filename
+
+                DOWNLOAD_TASKS[task_id].update({
+                    "status": "completed",
+                    "progress": 100.0,
+                    "filename": saved_file,
+                    "file_url": f"/api/files/downloads/{saved_file}",
+                    "title": title,
+                    "thumbnail": info.get('thumbnail', ''),
+                    "duration": info.get('duration', 0)
+                })
+        except Exception as e:
+            logger.error(f"Download failed for task {task_id}: {e}")
+            DOWNLOAD_TASKS[task_id].update({
+                "status": "failed",
+                "error": str(e)
+            })
+
+    thread = threading.Thread(target=run_download, daemon=True)
+    thread.start()
+    return task_id
+
+def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:
+    return DOWNLOAD_TASKS.get(task_id)
